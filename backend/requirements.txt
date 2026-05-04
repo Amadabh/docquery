@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+python-dotenv
+groq
+qdrant-client[fastembed]
+llama-parse
+llama-index-core
+python-multipart

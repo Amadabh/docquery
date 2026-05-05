@@ -15,8 +15,7 @@ An intelligent document assistant that lets you upload files, index their conten
 ---
 
 ## Architecture
-
-![Document Ingestion Pipeline](assets/doc_ingestion.png)
+<img src="assets/doc_ingestion.png" alt="Document Ingestion Pipeline" height="600"/>
 
 ## Tech Stack
 

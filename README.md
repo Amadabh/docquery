@@ -26,6 +26,8 @@ An intelligent document assistant that lets you upload files, index their conten
 
 ## 🏗️ Architecture
 
+![Document Ingestion Pipeline](assets/doc_ingestion.png)
+
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                        Frontend                              │

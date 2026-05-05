@@ -14,7 +14,7 @@ An intelligent document assistant that lets you upload files, index their conten
 ## ✨ Features
 
 - **Multi-format file upload** — PDF, TXT, CSV, XLSX, DOCX, images (PNG/JPG/JPEG/GIF/WEBP), and audio (MP3, WAV, M4A, OGG, FLAC, WEBM)
-- **Semantic search** — Documents are chunked and embedded with `BAAI/bge-small-en`; questions retrieve the most relevant passages via cosine similarity
+- **Semantic search** — Documents are chunked with LlamaIndex `SentenceSplitter` and embedded with `BAAI/bge-small-en`; questions retrieve the most relevant passages via cosine similarity
 - **LLM-synthesized answers** — Groq's `llama-3.3-70b-versatile` generates coherent answers grounded in your document context
 - **Streaming responses** — Answers stream token-by-token for a responsive chat experience
 - **Image understanding** — Images are described using Groq's vision model (`llama-4-scout-17b-16e-instruct`) and the description is indexed for search
@@ -50,7 +50,9 @@ An intelligent document assistant that lets you upload files, index their conten
 │  └────────┬────────┘  │  Stream LLM   │                     │
 │           │           └───────┬────────┘                     │
 │           │                   │                              │
-│   chunk + embed          query + retrieve                    │
+│   chunk (LlamaIndex      query + retrieve                    │
+│   SentenceSplitter)           │                              │
+│   + embed (BGE)               │                              │
 │           │                   │                              │
 │           ▼                   ▼                              │
 │  ┌────────────────────────────────────┐                      │
@@ -65,9 +67,9 @@ An intelligent document assistant that lets you upload files, index their conten
 ### Data Flow
 
 ```
-Upload → Extract Text → Chunk (500 tokens, 50 overlap) → Embed → Store in Qdrant
-                                                                        │
-Ask → Embed Question → Semantic Search (top 10, threshold 0.5) ─────────┘
+Upload → Extract Text → Chunk (LlamaIndex SentenceSplitter, 500 tokens, 50 overlap) → Embed (BGE) → Store in Qdrant
+                                                                                                            │
+Ask → Embed Question → Semantic Search (top 10, threshold 0.5) ─────────────────────────────────────────────┘
                                                           │
                                               Build Prompt with Context
                                                           │
@@ -82,6 +84,7 @@ Ask → Embed Question → Semantic Search (top 10, threshold 0.5) ────�
 |---|---|---|
 | **LLM** | [Groq](https://groq.com/) (`llama-3.3-70b-versatile`) | Free tier, extremely fast inference via custom LPU hardware |
 | **Embeddings** | `BAAI/bge-small-en` via FastEmbed | Runs locally (no API cost), high quality for its size, fast |
+| **Chunking** | LlamaIndex `SentenceSplitter` | Respects sentence boundaries, accurate token counting via `tiktoken`, preserves LlamaParse metadata |
 | **Vector DB** | [Qdrant](https://qdrant.tech/) | Purpose-built for vector search, simple Docker setup, payload filtering |
 | **File Parsing** | [LlamaParse](https://docs.llamaindex.ai/en/stable/llama_cloud/llama_parse/) | Handles PDF, DOCX, XLSX, CSV, and more with high fidelity |
 | **Vision** | Groq (`llama-4-scout-17b-16e-instruct`) | Free multimodal model for image description |
@@ -129,6 +132,14 @@ This starts three containers:
 | **Backend** | [http://localhost:8000](http://localhost:8000) |
 | **Qdrant** | [http://localhost:6333](http://localhost:6333) |
 
+> ⚠️ **Wait for the BGE embedding model to finish loading before uploading files or asking questions.**
+>
+> On first startup (or after clearing Docker volumes), the backend downloads and initializes the `BAAI/bge-small-en` model via FastEmbed. This can take **30–60 seconds** depending on your machine and internet speed. Watch the backend logs for a line like:
+> ```
+> Fetching 5 files: 100%|██████████| 5/5 [...]
+> ```
+> or a confirmation that the embedding model is ready. Sending requests before this completes will result in errors. Subsequent starts are fast because the model is cached.
+
 ### Option 2: Local Development
 
 **Terminal 1 — Qdrant:**
@@ -148,6 +159,8 @@ cp .env.example .env
 
 uvicorn main:app --reload --port 8000
 ```
+
+> ⚠️ **BGE cold start:** On first run, FastEmbed will download `BAAI/bge-small-en` before the server is ready to handle requests. Wait until you see the Uvicorn startup message (`Application startup complete`) before using the app — the embedding model must finish loading first.
 
 **Terminal 3 — Frontend:**
 ```bash
@@ -328,9 +341,9 @@ curl -X POST http://localhost:8000/transcribe \
 | **Single user, no auth** | MVP scope — simplifies architecture; multi-tenant support can be added via collection-per-user |
 | **No chat history/memory** | Each question is independent; keeps the retrieval pipeline stateless and simple |
 | **No document deletion** | Documents persist indefinitely; deletion can be added by tracking Qdrant point IDs per file |
-| **Chunk size 500 / overlap 50** | Balances context richness with embedding precision; tunable per use case |
+| **`SentenceSplitter` (500 tokens / 50 overlap)** | Respects sentence boundaries for more coherent chunks; size balances context richness with embedding precision — tunable per use case |
 | **Score threshold 0.5** | Filters out low-relevance noise; can be adjusted or made dynamic |
-| **Local embeddings (FastEmbed)** | Zero API cost, runs on CPU, avoids rate limits — trades off for slightly lower quality vs. OpenAI embeddings |
+| **Local embeddings (FastEmbed + BGE)** | Zero API cost, runs on CPU, avoids rate limits — trades off for a cold-start delay on first boot while the model downloads and initializes |
 
 ### Scaling Considerations
 

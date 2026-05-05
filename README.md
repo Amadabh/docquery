@@ -104,77 +104,25 @@ bun run dev
  
 Open: http://localhost:5173
 
-## 📖 Usage
+## Usage
 Upload documents via the 📎 icon, then ask questions in chat. The system retrieves relevant context using embeddings and streams LLM-generated answers. Voice input is also supported via 🎤 microphone.
 
 ---
 
-## 🧪 Testing the System
+## Test Workflow
+ 
+Upload both sample files (`therapy_tips.txt` and `school_guide.txt`) via the paperclip icon, then run these queries:
+ 
+| Step | Query | Expected |
+|------|-------|----------|
+| 1 | "What's a good therapy for anxiety?" | CBT, deep breathing, mindfulness |
+| 2 | "What accommodations can we request?" | IEP, 504 plan, extended time |
+| 3 | "Should therapy come before accommodations?" | Synthesizes content from **both** files |
+ 
+Step 3 is the key test — a correct response means cross-document retrieval is working.
 
-### Sample Test Documents
 
-Create these files to test the system end-to-end:
-
-**`therapy_tips.txt`**
-```
-10 Tips for Managing Anxiety
-
-1. Practice deep breathing exercises — 4-7-8 technique works well.
-2. Try Cognitive Behavioral Therapy (CBT) to reframe negative thought patterns.
-3. Establish a consistent sleep schedule.
-4. Limit caffeine and alcohol intake.
-5. Exercise regularly — even 20 minutes of walking helps.
-6. Practice mindfulness meditation daily.
-7. Keep a worry journal to externalize anxious thoughts.
-8. Use progressive muscle relaxation before bed.
-9. Set boundaries and learn to say no.
-10. Consider speaking with a licensed therapist for professional guidance.
-```
-
-**`school_guide.txt`**
-```
-School Accommodation Options for Students
-
-IEP (Individualized Education Program):
-- Legally binding document for students with disabilities.
-- Includes specific learning goals and services.
-- Requires evaluation and team meeting.
-
-504 Plan:
-- Provides accommodations for students with disabilities.
-- Examples: extra test time, preferential seating, note-taking assistance.
-- Less formal than an IEP.
-
-Common Accommodations:
-- Extended time on tests and assignments
-- Quiet testing environment
-- Modified homework expectations
-- Access to assistive technology
-- Regular check-ins with a counselor
-- Flexible seating arrangements
-
-How to Request:
-1. Contact the school's special education coordinator.
-2. Provide documentation of the student's needs.
-3. Attend a planning meeting with the school team.
-```
-
-### Test Workflow
-
-```
-Step 1: Upload "therapy_tips.txt" via the paperclip icon
-Step 2: Upload "school_guide.txt"
-Step 3: Ask "What's a good therapy for anxiety?"
-        → Should get an answer referencing CBT, deep breathing, etc.
-Step 4: Ask "What accommodations can we request?"
-        → Should get an answer about IEP, 504 plans, extra time, etc.
-Step 5: Ask "Should therapy come before accommodations?"
-        → Should synthesize an answer from BOTH documents
-```
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 .

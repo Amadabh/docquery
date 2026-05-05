@@ -1,4 +1,4 @@
-# 🧪 Test Workflow
+# Test Workflow
 
 Upload both sample files (`therapy_tips.txt` and `school_guide.txt`) via the paperclip icon, then run these queries:
 

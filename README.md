@@ -110,6 +110,7 @@ Upload documents via the 📎 icon, then ask questions in chat. The system retri
 ---
 
 ## Example Use Cases
+Upload the files from Test Files folder and try the below queries:
 - “What is CBT therapy?”
 - “What accommodations can students request?”
 - “Summarize all uploaded documents”

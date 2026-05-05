@@ -109,47 +109,8 @@ Upload documents via the 📎 icon, then ask questions in chat. The system retri
 
 ---
 
-## Test Workflow
- 
-Upload both sample files (`therapy_tips.txt` and `school_guide.txt`) via the paperclip icon, then run these queries:
- 
-| Step | Query | Expected |
-|------|-------|----------|
-| 1 | "What's a good therapy for anxiety?" | CBT, deep breathing, mindfulness |
-| 2 | "What accommodations can we request?" | IEP, 504 plan, extended time |
-| 3 | "Should therapy come before accommodations?" | Synthesizes content from **both** files |
- 
-Step 3 is the key test — a correct response means cross-document retrieval is working.
-
-
-## Project Structure
-
-```
-.
-├── backend/
-│   ├── main.py              # FastAPI app — upload, ask, transcribe endpoints
-│   ├── requirements.txt     # Python dependencies
-│   ├── .env.example          # Environment variable template
-│   └── Dockerfile           # Backend container image
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx          # Main chat UI component
-│   │   ├── main.jsx         # React entry point
-│   │   ├── index.css        # Global styles
-│   │   └── components/ui/   # Reusable UI components (badge, button, card, scroll-area)
-│   ├── index.html           # HTML entry point
-│   ├── package.json         # Frontend dependencies
-│   ├── vite.config.js       # Vite + Tailwind configuration
-│   └── Dockerfile           # Frontend container image
-├── docker-compose.yml       # Orchestrates backend, frontend, and Qdrant
-├── qdrant_storage/          # Qdrant persistent data (auto-created)
-└── README.md
-```
-
----
-
----
-
-## 📜 License
-
-This project is for educational and assessment purposes.
+## Example Use Cases
+- “What is CBT therapy?”
+- “What accommodations can students request?”
+- “Summarize all uploaded documents”
+- Cross-document reasoning questions

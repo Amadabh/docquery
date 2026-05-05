@@ -1,13 +1,14 @@
 import { useState, useRef } from "react"
 import axios from "axios"
-import { Paperclip, Send, FileText, FileSpreadsheet, File, BookOpen } from "lucide-react"
+import { Paperclip, Send, FileText, FileSpreadsheet, File as FileIcon, BookOpen, Mic, MicOff } from "lucide-react"
 
 const API = "http://localhost:8000"
 
 const getFileIcon = (name) => {
   if (name.endsWith(".pdf")) return <FileText size={13} />
   if (name.endsWith(".csv") || name.endsWith(".xlsx")) return <FileSpreadsheet size={13} />
-  return <File size={13} />
+  if ([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"].some(ext => name.endsWith(ext))) return <Mic size={13} />
+  return <FileIcon size={13} />
 }
 
 const getFileBadgeStyle = (name) => {
@@ -15,6 +16,7 @@ const getFileBadgeStyle = (name) => {
   if (name.endsWith(".csv")) return { bg: "bg-emerald-100 text-emerald-700" }
   if (name.endsWith(".xlsx")) return { bg: "bg-emerald-100 text-emerald-700" }
   if (name.endsWith(".docx")) return { bg: "bg-blue-100 text-blue-700" }
+  if ([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".webm"].some(ext => name.endsWith(ext))) return { bg: "bg-purple-100 text-purple-700" }
   return { bg: "bg-gray-100 text-gray-600" }
 }
 
@@ -22,81 +24,124 @@ export default function App() {
   const [docs, setDocs] = useState([])
   const [messages, setMessages] = useState([])
   const [question, setQuestion] = useState("")
-  const [attachedFile, setAttachedFile] = useState(null)
+  const [attachedFiles, setAttachedFiles] = useState([])
   const [uploading, setUploading] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [recording, setRecording] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+  const mediaRecorderRef = useRef(null)
+  const audioChunksRef = useRef([])
   const fileInputRef = useRef(null)
   const bottomRef = useRef(null)
 
+  // Instantly attach — no upload yet
   const handleFileChange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setAttachedFile(file)
+    const files = Array.from(e.target.files)
+    if (!files.length) return
+    setAttachedFiles((prev) => [...prev, ...files])
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   const uploadFile = async (file) => {
-    setUploading(true)
     const formData = new FormData()
     formData.append("file", file)
+    const res = await axios.post(`${API}/upload`, formData)
+    setDocs((prev) => [...prev, { name: file.name, size: file.size, chunks: res.data.chunks_stored }])
+  }
+
+  const toggleMic = async () => {
+    if (!recording) {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      audioChunksRef.current = []
+      const recorder = new MediaRecorder(stream)
+      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data)
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+        const audiofile = new File([blob], "voice.webm", { type: "audio/webm" })
+        setTranscribing(true)
+        try {
+          const form = new FormData()
+          form.append("file", audiofile)
+          const res = await axios.post(`${API}/transcribe`, form)
+          if (res.data.transcript) setQuestion(res.data.transcript)
+        } catch (err) {
+          console.error("Transcription failed", err)
+        } finally {
+          setTranscribing(false)
+        }
+      }
+      recorder.start()
+      mediaRecorderRef.current = recorder
+      setRecording(true)
+    } else {
+      mediaRecorderRef.current.stop()
+      setRecording(false)
+    }
+  }
+
+  const handleSend = async () => {
+    if (!question.trim() && !attachedFiles.length) return
+    const userQuestion = question
+    setMessages((prev) => [...prev, { role: "user", content: userQuestion }])
+    setQuestion("")
+    setAsking(true)
+
+    // Upload any pending files now
     try {
-      const res = await axios.post(`${API}/upload`, formData)
-      setDocs((prev) => [...prev, { name: file.name, size: file.size, chunks: res.data.chunks_stored }])
-      setAttachedFile(null)
+      setUploading(true)
+      for (const file of attachedFiles) {
+        await uploadFile(file)
+      }
+      setAttachedFiles([])
     } catch (err) {
       console.error("Upload failed", err)
+      setAsking(false)
+      setUploading(false)
+      return
     } finally {
       setUploading(false)
-      if (fileInputRef.current) fileInputRef.current.value = ""
     }
-  }
 
-const handleSend = async () => {
-  if (!question.trim() && !attachedFile) return
-  const userQuestion = question
-  setMessages((prev) => [...prev, { role: "user", content: userQuestion }])
-  setQuestion("")
-  setAsking(true)
+    if (!userQuestion.trim()) { setAsking(false); return }
 
-  if (attachedFile) await uploadFile(attachedFile)
-  if (!userQuestion.trim()) { setAsking(false); return }
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }])
 
-  setMessages((prev) => [...prev, { role: "assistant", content: "" }])
+    try {
+      const res = await fetch(`${API}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: userQuestion }),
+      })
 
-  try {
-    const res = await fetch(`${API}/ask`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: userQuestion }),
-    })
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
 
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      const chunk = decoder.decode(value, { stream: true })
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        setMessages((prev) => {
+          const updated = [...prev]
+          updated[updated.length - 1] = {
+            ...updated[updated.length - 1],
+            content: updated[updated.length - 1].content + chunk,
+          }
+          return updated
+        })
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+      }
+    } catch (err) {
       setMessages((prev) => {
         const updated = [...prev]
-        updated[updated.length - 1] = {
-          ...updated[updated.length - 1],
-          content: updated[updated.length - 1].content + chunk,
-        }
+        updated[updated.length - 1] = { role: "assistant", content: "Something went wrong. Please try again." }
         return updated
       })
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" }) 
+    } finally {
+      setAsking(false)
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100)
     }
-  } catch (err) {
-    setMessages((prev) => {
-      const updated = [...prev]
-      updated[updated.length - 1] = { role: "assistant", content: "Something went wrong. Please try again." }
-      return updated
-    })
-  } finally {
-    setAsking(false)
-    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 100)
   }
-}
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -116,8 +161,6 @@ const handleSend = async () => {
 
       {/* Sidebar */}
       <div className="w-64 border-r border-gray-200 flex flex-col bg-gray-50">
-
-        {/* Logo */}
         <div className="px-5 py-5 border-b border-gray-200">
           <div className="flex items-center gap-2.5 mb-1">
             <div className="w-8 h-8 rounded-lg bg-black flex items-center justify-center flex-shrink-0">
@@ -130,7 +173,6 @@ const handleSend = async () => {
           </p>
         </div>
 
-        {/* Doc list */}
         <div className="flex-1 overflow-y-auto px-3 py-3">
           {docs.length === 0 ? (
             <div className="mt-6 text-center px-4">
@@ -166,8 +208,6 @@ const handleSend = async () => {
 
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
-
-        {/* Header */}
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-white">
           <div>
             <h2 className="text-base font-semibold text-gray-900">Ask your documents</h2>
@@ -221,11 +261,22 @@ const handleSend = async () => {
 
         {/* Input */}
         <div className="px-6 py-4 border-t border-gray-200 bg-white">
-          {attachedFile && (
-            <div className="flex items-center gap-1.5 mb-2.5 bg-gray-100 border border-gray-200 rounded-lg px-3 py-1.5 w-fit text-xs text-gray-600">
-              <Paperclip size={11} />
-              <span>{attachedFile.name}</span>
-              <button onClick={() => setAttachedFile(null)} className="ml-1 text-gray-400 hover:text-gray-700">✕</button>
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {attachedFiles.map((file, i) => (
+                <div key={i} className="flex items-center gap-1.5 bg-gray-100 border border-gray-200 rounded-lg px-3 py-1.5 text-xs text-gray-600">
+                  <Paperclip size={11} />
+                  <span>{file.name}</span>
+                  {!asking ? (
+                    <button
+                      onClick={() => setAttachedFiles((prev) => prev.filter((_, j) => j !== i))}
+                      className="ml-1 text-gray-400 hover:text-gray-700"
+                    >✕</button>
+                  ) : (
+                    <span className="ml-1 w-3 h-3 border border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
+                  )}
+                </div>
+              ))}
             </div>
           )}
           <div className="flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3 focus-within:border-gray-400 transition-colors">
@@ -234,36 +285,57 @@ const handleSend = async () => {
               ref={fileInputRef}
               onChange={handleFileChange}
               className="hidden"
-              accept=".pdf,.txt,.csv,.xlsx,.docx,.png,.jpg,.jpeg"
+              multiple
+              accept=".pdf,.txt,.csv,.xlsx,.docx,.png,.jpg,.jpeg,.mp3,.wav,.m4a,.ogg,.flac,.webm"
             />
             <button
               className="text-gray-400 hover:text-gray-700 transition-colors flex-shrink-0 pb-0.5 disabled:opacity-40"
               onClick={() => fileInputRef.current.click()}
-              disabled={uploading}
+              disabled={asking}
             >
               <Paperclip size={16} />
             </button>
+
+            <button
+              className={`transition-colors flex-shrink-0 pb-0.5 disabled:opacity-40 ${
+                recording ? "text-red-500 animate-pulse" : "text-gray-400 hover:text-gray-700"
+              }`}
+              onClick={toggleMic}
+              disabled={transcribing || asking}
+              title={recording ? "Stop recording" : "Voice input"}
+            >
+              {recording ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
+
             <textarea
               className="flex-1 bg-transparent text-sm text-gray-800 placeholder:text-gray-400 resize-none outline-none min-h-[22px] max-h-[120px] py-0"
-              placeholder="Ask a question about your documents..."
+              placeholder={transcribing ? "Transcribing..." : "Ask a question about your documents..."}
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={handleKeyDown}
               rows={1}
             />
-  <button
-  className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors
-    ${asking || uploading || (!question.trim() && !attachedFile)
-      ? "bg-gray-200 cursor-not-allowed"
-      : "bg-gray-900 hover:bg-gray-700 cursor-pointer"
-    }`}
-  onClick={handleSend}
-  disabled={asking || uploading || (!question.trim() && !attachedFile)}
->
-  <Send size={13} color={asking || uploading || (!question.trim() && !attachedFile) ? "#9ca3af" : "white"} />
-</button>
+            <button
+              className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                asking || (!question.trim() && !attachedFiles.length)
+                  ? "bg-gray-200 cursor-not-allowed"
+                  : "bg-gray-900 hover:bg-gray-700 cursor-pointer"
+              }`}
+              onClick={handleSend}
+              disabled={asking || (!question.trim() && !attachedFiles.length)}
+            >
+              <Send size={13} color={asking || (!question.trim() && !attachedFiles.length) ? "#9ca3af" : "white"} />
+            </button>
           </div>
-          <p className="text-xs text-gray-400 mt-2 px-1">Press Enter to send · Shift+Enter for new line</p>
+          <p className="text-xs text-gray-400 mt-2 px-1">
+            {uploading
+              ? "Uploading files..."
+              : transcribing
+              ? "Transcribing your voice..."
+              : recording
+              ? "Recording... click mic to stop"
+              : "Press Enter to send · Shift+Enter for new line"}
+          </p>
         </div>
       </div>
     </div>

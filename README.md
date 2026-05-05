@@ -44,7 +44,7 @@ An intelligent document assistant that lets you upload files, index their conten
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
  
 ### Option 1: Docker Compose (Recommended)
  
